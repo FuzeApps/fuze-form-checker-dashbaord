@@ -18,15 +18,13 @@ import {
   ChevronRight,
   RotateCcw,
   ExternalLink,
+  Sparkles,
 } from 'lucide-react';
 
-const EXERCISE_TYPES = [
-  { value: 'squat',           label: 'Squat',            emoji: '🏋️' },
-  { value: 'rdl',             label: 'Romanian Deadlift', emoji: '🔱' },
-  { value: 'deadlift',        label: 'Deadlift',          emoji: '💪' },
-  { value: 'lunge',           label: 'Lunge',             emoji: '🦵' },
-  { value: 'pushup',          label: 'Push-up',           emoji: '🤸' },
-  { value: 'overhead_press',  label: 'Overhead Press',    emoji: '🙌' },
+const POPULAR_EXERCISES = [
+  'Squat', 'Deadlift', 'Bench Press', 'Pull-up', 'Lunge',
+  'Overhead Press', 'Bicep Curl', 'Romanian Deadlift', 'Hip Thrust', 'Push-up',
+  'Lateral Raise', 'Tricep Dip', 'Bent-over Row', 'Leg Press', 'Plank',
 ];
 
 type Step = 'configure' | 'uploading' | 'processing' | 'done' | 'error';
@@ -47,7 +45,7 @@ export default function TestUploadPage() {
   const [step, setStep] = useState<Step>('configure');
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [exerciseType, setExerciseType] = useState('squat');
+  const [exerciseType, setExerciseType] = useState('');
   const [externalUserId, setExternalUserId] = useState('test-user-001');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [analysisProgress, setAnalysisProgress] = useState(0);
@@ -89,6 +87,7 @@ export default function TestUploadPage() {
     setStep('configure');
     setFile(null);
     setPreviewUrl(null);
+    setExerciseType('');
     setUploadProgress(0);
     setAnalysisProgress(0);
     setAnalysisStage('');
@@ -208,29 +207,45 @@ export default function TestUploadPage() {
       {/* ─── Configure step ─────────────────────────────────────── */}
       {step === 'configure' && (
         <div className="space-y-5">
-          {/* Exercise type picker */}
+          {/* Exercise name input */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Exercise Type</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-base">Exercise Name</CardTitle>
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                  <Sparkles className="h-3 w-3" /> AI-powered
+                </span>
+              </div>
+              <CardDescription>
+                Type any exercise — our AI generates the detection config automatically.
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                {EXERCISE_TYPES.map((ex) => (
-                  <button
-                    key={ex.value}
-                    type="button"
-                    onClick={() => setExerciseType(ex.value)}
-                    className={cn(
-                      'flex flex-col items-center gap-1 rounded-lg border p-3 text-xs font-medium transition-all',
-                      exerciseType === ex.value
-                        ? 'border-primary bg-primary/5 text-primary'
-                        : 'border-border hover:border-primary/50 hover:bg-muted/50'
-                    )}
-                  >
-                    <span className="text-xl">{ex.emoji}</span>
-                    {ex.label}
-                  </button>
-                ))}
+            <CardContent className="space-y-3">
+              <Input
+                value={exerciseType}
+                onChange={(e) => setExerciseType(e.target.value)}
+                placeholder="e.g. Bicep Curl, Hip Thrust, Bulgarian Split Squat…"
+                className="text-base"
+              />
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">Popular</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {POPULAR_EXERCISES.map((ex) => (
+                    <button
+                      key={ex}
+                      type="button"
+                      onClick={() => setExerciseType(ex)}
+                      className={cn(
+                        'rounded-full border px-3 py-1 text-xs font-medium transition-all',
+                        exerciseType.toLowerCase() === ex.toLowerCase()
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border hover:border-primary/50 hover:bg-muted/50 text-muted-foreground'
+                      )}
+                    >
+                      {ex}
+                    </button>
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -312,11 +327,11 @@ export default function TestUploadPage() {
           <Button
             size="lg"
             className="w-full"
-            disabled={!file}
+            disabled={!file || !exerciseType.trim()}
             onClick={handleRun}
           >
             <Play className="h-4 w-4 mr-2" />
-            Run Analysis
+            {exerciseType.trim() ? `Analyse ${exerciseType}` : 'Run Analysis'}
           </Button>
         </div>
       )}
@@ -347,7 +362,7 @@ export default function TestUploadPage() {
           <CardContent className="pt-8 pb-8 space-y-5 text-center">
             <Loader2 className="h-10 w-10 text-primary mx-auto animate-spin" />
             <div>
-              <p className="font-semibold text-lg">Analysing pose…</p>
+              <p className="font-semibold text-lg">Analysing{exerciseType ? ` ${exerciseType}` : ' pose'}…</p>
               <p className="text-sm text-muted-foreground mt-1 capitalize">
                 {analysisStage ? analysisStage.replace(/_/g, ' ') : 'Worker is processing the video with MediaPipe'}
               </p>
