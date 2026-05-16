@@ -28,7 +28,7 @@ export function TableRow({ className, children, onClick }: { className?: string;
   );
 }
 
-export function TableHead({ className, children }: { className?: string; children: React.ReactNode }) {
+export function TableHead({ className, children }: { className?: string; children?: React.ReactNode }) {
   return (
     <th className={cn('h-12 px-4 text-left align-middle font-medium text-muted-foreground', className)}>
       {children}
@@ -36,6 +36,6 @@ export function TableHead({ className, children }: { className?: string; childre
   );
 }
 
-export function TableCell({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <td className={cn('p-4 align-middle', className)}>{children}</td>;
+export function TableCell({ className, children, colSpan }: { className?: string; children?: React.ReactNode; colSpan?: number }) {
+  return <td className={cn('p-4 align-middle', className)} colSpan={colSpan}>{children}</td>;
 }

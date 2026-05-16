@@ -26,7 +26,6 @@ export default function OverviewPage() {
     queryFn: getUsage,
   });
 
-  const completedCount = analyses?.data?.filter((a) => a.status === 'completed').length ?? 0;
   const failedCount = analyses?.data?.filter((a) => a.status === 'failed').length ?? 0;
   const totalCount = analyses?.meta?.total ?? 0;
 

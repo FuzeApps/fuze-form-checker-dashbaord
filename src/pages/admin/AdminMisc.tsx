@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatDate } from '@/lib/utils';
-import { Inbox, Mail, BarChart2, ClipboardList } from 'lucide-react';
+import { Inbox } from 'lucide-react';
 
 export function AdminWebhookEventsPage() {
   const { data, isLoading } = useQuery({ queryKey: ['admin-webhook-events'], queryFn: () => adminGetWebhookEvents() });

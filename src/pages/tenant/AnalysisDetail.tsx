@@ -26,7 +26,7 @@ import {
   Eye,
   ScanLine,
 } from 'lucide-react';
-import type { TimelineEventItem, IssueSeverity, IssueDetail } from '@/types/api';
+import type { TimelineEventItem, IssueDetail } from '@/types/api';
 
 const CATEGORY_LABELS: Record<string, string> = {
   stability: 'Stability',

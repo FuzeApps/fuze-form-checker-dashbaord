@@ -31,7 +31,6 @@ export default function WebhookPage() {
     });
   };
 
-  const currentUrl = form.url || config?.url || '';
   const isEnabled = form.enabled ?? config?.enabled ?? true;
 
   return (

@@ -7,7 +7,7 @@ import { Input, Label } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatDate } from '@/lib/utils';
-import { Plus, Copy, Eye, EyeOff, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, Copy, Trash2, AlertTriangle } from 'lucide-react';
 import type { ApiKeyCreated } from '@/types/api';
 
 export default function ApiKeysPage() {

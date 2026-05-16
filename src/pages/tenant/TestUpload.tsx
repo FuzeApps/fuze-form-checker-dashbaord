@@ -4,8 +4,7 @@ import axios from 'axios';
 import { createTestUploadSession, confirmTestUpload, getAnalysis } from '@/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input, Label } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { ProgressBar } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import {
