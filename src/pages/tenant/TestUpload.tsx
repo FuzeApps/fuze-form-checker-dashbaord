@@ -55,30 +55,41 @@ export default function TestUploadPage() {
   const [error, setError] = useState<string | null>(null);
   const [pollTimer, setPollTimer] = useState<ReturnType<typeof setInterval> | null>(null);
 
+  const isAcceptedVideo = (f: File) =>
+    f.type.startsWith('video/') ||
+    f.type === 'application/x-mpegurl' ||
+    f.type === 'application/vnd.apple.mpegurl' ||
+    f.name.toLowerCase().endsWith('.m3u8');
+
+  const isM3U8 = (f: File) =>
+    f.name.toLowerCase().endsWith('.m3u8') ||
+    f.type === 'application/x-mpegurl' ||
+    f.type === 'application/vnd.apple.mpegurl';
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (!f.type.startsWith('video/')) {
-      setError('Please select a video file.');
+    if (!isAcceptedVideo(f)) {
+      setError('Please select a video file (MP4, MOV, AVI, M3U8).');
       return;
     }
     if (f.size > 200 * 1024 * 1024) {
-      setError('Video must be under 200 MB.');
+      setError('File must be under 200 MB.');
       return;
     }
     setError(null);
     setFile(f);
-    const url = URL.createObjectURL(f);
-    setPreviewUrl(url);
+    // M3U8 is a playlist — browsers can't preview it, so skip the object URL
+    setPreviewUrl(isM3U8(f) ? null : URL.createObjectURL(f));
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     const f = e.dataTransfer.files[0];
-    if (f?.type.startsWith('video/')) {
+    if (f && isAcceptedVideo(f)) {
       setError(null);
       setFile(f);
-      setPreviewUrl(URL.createObjectURL(f));
+      setPreviewUrl(isM3U8(f) ? null : URL.createObjectURL(f));
     }
   }, []);
 
@@ -139,8 +150,11 @@ export default function TestUploadPage() {
       setUploadProgress(15);
 
       // Step 2: Upload directly to S3 presigned URL
+      const contentType = isM3U8(file)
+        ? 'application/x-mpegurl'
+        : file.type || 'video/mp4';
       await axios.put(session.uploadUrl, file, {
-        headers: { 'Content-Type': file.type || 'video/mp4' },
+        headers: { 'Content-Type': contentType },
         onUploadProgress: (e) => {
           const pct = Math.round(((e.loaded ?? 0) / (e.total ?? 1)) * 80) + 15;
           setUploadProgress(Math.min(pct, 95));
@@ -269,7 +283,7 @@ export default function TestUploadPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Video File</CardTitle>
-              <CardDescription>MP4 or MOV recommended. Max 200 MB. Camera angle should show the full body.</CardDescription>
+              <CardDescription>MP4, MOV, AVI or M3U8 (HLS). Max 200 MB. Camera angle should show the full body.</CardDescription>
             </CardHeader>
             <CardContent>
               {!file ? (
@@ -282,25 +296,38 @@ export default function TestUploadPage() {
                   <Video className="h-10 w-10 text-muted-foreground" />
                   <div className="text-center">
                     <p className="font-medium">Drop a video here or click to browse</p>
-                    <p className="text-sm text-muted-foreground mt-1">MP4, MOV, AVI — up to 200 MB</p>
+                    <p className="text-sm text-muted-foreground mt-1">MP4, MOV, AVI, M3U8 — up to 200 MB</p>
                   </div>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="video/*"
+                    accept="video/*,.m3u8,application/x-mpegurl,application/vnd.apple.mpegurl"
                     className="hidden"
                     onChange={handleFileChange}
                   />
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <video
-                    ref={videoPreviewRef}
-                    src={previewUrl!}
-                    controls
-                    className="w-full rounded-lg bg-black aspect-video"
-                    playsInline
-                  />
+                  {previewUrl ? (
+                    <video
+                      ref={videoPreviewRef}
+                      src={previewUrl}
+                      controls
+                      className="w-full rounded-lg bg-black aspect-video"
+                      playsInline
+                    />
+                  ) : (
+                    /* M3U8 — browsers can't play HLS playlists natively */
+                    <div className="flex items-center gap-3 rounded-lg border bg-muted/40 p-4">
+                      <Video className="h-8 w-8 text-muted-foreground flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">{file.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          HLS playlist — will be converted to MP4 before analysis
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">
                       {file.name} — {(file.size / (1024 * 1024)).toFixed(1)} MB
