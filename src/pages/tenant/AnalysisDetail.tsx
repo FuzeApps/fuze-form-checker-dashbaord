@@ -395,6 +395,19 @@ export default function AnalysisDetailPage() {
 
         {result && (
           <>
+            {result.repCount === 0 && (
+              <div className="mb-4 flex items-start gap-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
+                <span className="mt-0.5 text-base">⚠️</span>
+                <div>
+                  <p className="font-semibold">No reps detected</p>
+                  <p className="mt-0.5 text-yellow-700 dark:text-yellow-400">
+                    The rep counter couldn't find a complete movement cycle — this usually means the athlete wasn't fully
+                    in frame, the camera angle didn't capture the full range of motion, or the video was very short.
+                    The score is based on static pose frames only and may not reflect actual performance.
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <Card>
                 <CardHeader>
