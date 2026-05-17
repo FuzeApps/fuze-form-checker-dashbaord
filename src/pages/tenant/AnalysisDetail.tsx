@@ -26,6 +26,9 @@ import {
   Eye,
   ScanLine,
   Activity,
+  Target,
+  Lightbulb,
+  Star,
 } from 'lucide-react';
 
 // ─── MediaPipe skeleton ────────────────────────────────────────────────────────
@@ -182,6 +185,30 @@ function IssueRow({
           {issue.type.replace(/_/g, ' ')}
         </p>
         <p className="text-xs text-muted-foreground mt-0.5">{issue.message}</p>
+
+        {/* Rich vision-issue details */}
+        {isVision && (issue.description || issue.correction || issue.visibleEvidence) && (
+          <div className="mt-2 space-y-1.5 rounded-md bg-purple-50/60 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/40 px-2.5 py-2">
+            {issue.description && (
+              <p className="text-xs text-purple-800 dark:text-purple-300">
+                <span className="font-semibold">What's happening: </span>
+                {issue.description}
+              </p>
+            )}
+            {issue.correction && (
+              <p className="text-xs text-purple-800 dark:text-purple-300">
+                <span className="font-semibold">Fix: </span>
+                {issue.correction}
+              </p>
+            )}
+            {issue.visibleEvidence && (
+              <p className="text-[10px] text-purple-600/70 dark:text-purple-400/70 italic">
+                Evidence: {issue.visibleEvidence}
+              </p>
+            )}
+          </div>
+        )}
+
         {issue.timestamps && issue.timestamps.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1.5">
             {issue.timestamps.slice(0, 5).map((ts, ti) => (
@@ -195,7 +222,7 @@ function IssueRow({
             ))}
           </div>
         )}
-        {isVision && (
+        {isVision && !issue.description && (
           <p className="text-[10px] text-purple-500 dark:text-purple-400 mt-1.5 italic">
             Detected via visual frame analysis — no specific timestamp
           </p>
@@ -664,9 +691,32 @@ export default function AnalysisDetailPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm leading-relaxed">{result.summary}</p>
+
+                {/* Key strengths */}
+                {result.keyStrengths && result.keyStrengths.length > 0 && (
+                  <div>
+                    <p className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+                      <Star className="h-3.5 w-3.5 text-yellow-500" />
+                      Key Strengths
+                    </p>
+                    <ul className="space-y-1">
+                      {result.keyStrengths.map((s, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm">
+                          <span className="mt-1 h-1.5 w-1.5 rounded-full bg-yellow-500 flex-shrink-0" />
+                          {s}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Recommendations */}
                 {(result.recommendations as string[]).length > 0 && (
                   <div>
-                    <p className="text-sm font-semibold mb-2">Recommendations</p>
+                    <p className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+                      <Lightbulb className="h-3.5 w-3.5 text-primary" />
+                      Recommendations
+                    </p>
                     <ul className="space-y-1">
                       {(result.recommendations as string[]).map((rec, i) => (
                         <li key={i} className="flex items-start gap-2 text-sm">
@@ -675,6 +725,17 @@ export default function AnalysisDetailPage() {
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+
+                {/* Next session focus */}
+                {result.nextSessionFocus && (
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
+                    <p className="text-xs font-semibold text-primary mb-1 flex items-center gap-1.5">
+                      <Target className="h-3.5 w-3.5" />
+                      Next Session Focus
+                    </p>
+                    <p className="text-sm text-foreground/80">{result.nextSessionFocus}</p>
                   </div>
                 )}
               </CardContent>

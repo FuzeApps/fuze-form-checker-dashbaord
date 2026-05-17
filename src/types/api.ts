@@ -79,6 +79,9 @@ export interface IssueDetail {
   repNumbers?: number[];
   timestamps?: number[];
   detectedBy?: 'pose' | 'vision';
+  description?: string;
+  correction?: string;
+  visibleEvidence?: string;
 }
 
 export interface AnalysisSession {
@@ -112,6 +115,8 @@ export interface AnalysisSessionDetail extends AnalysisSession {
     summary: string;
     issues: IssueDetail[];
     recommendations: string[];
+    keyStrengths?: string[];
+    nextSessionFocus?: string;
     timelineObjectKey: string | null;
     landmarksObjectKey: string | null;
     overlayObjectKey: string | null;
