@@ -25,7 +25,106 @@ import {
   Maximize2,
   Eye,
   ScanLine,
+  Activity,
 } from 'lucide-react';
+
+// ─── MediaPipe skeleton ────────────────────────────────────────────────────────
+
+const POSE_CONNECTIONS: [number, number][] = [
+  [0,1],[1,2],[2,3],[3,7],[0,4],[4,5],[5,6],[6,8],
+  [9,10],
+  [11,12],[11,13],[13,15],[15,17],[15,19],[15,21],[17,19],
+  [12,14],[14,16],[16,18],[16,20],[16,22],[18,20],
+  [11,23],[12,24],[23,24],
+  [23,25],[24,26],[25,27],[26,28],
+  [27,29],[28,30],[29,31],[30,32],[27,31],[28,32],
+];
+
+interface OverlayLandmark { x: number; y: number; z: number; visibility: number }
+interface OverlayFrame {
+  frame: number;
+  timestamp: number;
+  skeleton: { landmarks: OverlayLandmark[] };
+  angles: Record<string, number>;
+}
+interface OverlayData { fps: number; frames: OverlayFrame[] }
+
+async function fetchOverlay(url: string): Promise<OverlayData> {
+  const res = await fetch(url);
+  // S3 stores overlay with Content-Encoding: gzip. Browsers automatically
+  // decompress Content-Encoding responses, so res.text() already yields plain JSON.
+  // Attempting a second DecompressionStream pass would corrupt the data.
+  const text = await res.text();
+  return JSON.parse(text) as OverlayData;
+}
+
+function drawSkeleton(
+  canvas: HTMLCanvasElement,
+  video: HTMLVideoElement,
+  frame: OverlayFrame,
+  primaryAngle?: string,
+) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  canvas.width  = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const lms = frame.skeleton?.landmarks;
+  if (!lms?.length) return;
+
+  // Compute letterbox offsets (video uses object-fit: contain)
+  const vw = video.videoWidth  || canvas.width;
+  const vh = video.videoHeight || canvas.height;
+  const videoAspect  = vw / vh;
+  const canvasAspect = canvas.width / canvas.height;
+  let drawX = 0, drawY = 0, drawW = canvas.width, drawH = canvas.height;
+  if (videoAspect > canvasAspect) {
+    drawH = canvas.width / videoAspect;
+    drawY = (canvas.height - drawH) / 2;
+  } else {
+    drawW = canvas.height * videoAspect;
+    drawX = (canvas.width - drawW) / 2;
+  }
+
+  const tx = (nx: number) => drawX + nx * drawW;
+  const ty = (ny: number) => drawY + ny * drawH;
+
+  // Skeleton connections
+  ctx.lineWidth   = 2;
+  ctx.strokeStyle = 'rgba(0, 230, 118, 0.85)';
+  for (const [a, b] of POSE_CONNECTIONS) {
+    const la = lms[a], lb = lms[b];
+    if (!la || !lb || (la.visibility ?? 0) < 0.3 || (lb.visibility ?? 0) < 0.3) continue;
+    ctx.beginPath();
+    ctx.moveTo(tx(la.x), ty(la.y));
+    ctx.lineTo(tx(lb.x), ty(lb.y));
+    ctx.stroke();
+  }
+
+  // Landmark dots
+  for (const lm of lms) {
+    if (!lm || (lm.visibility ?? 0) < 0.3) continue;
+    ctx.beginPath();
+    ctx.arc(tx(lm.x), ty(lm.y), 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0, 230, 118, 0.95)';
+    ctx.fill();
+  }
+
+  // Angle readout
+  if (primaryAngle && frame.angles) {
+    const val = frame.angles[primaryAngle] ?? -1;
+    if (val > 0) {
+      const label = `${primaryAngle}: ${val.toFixed(0)}°`;
+      ctx.font = 'bold 13px monospace';
+      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(drawX + 8, drawY + 8, tw + 12, 22);
+      ctx.fillStyle = '#00e676';
+      ctx.fillText(label, drawX + 14, drawY + 24);
+    }
+  }
+}
 import type { TimelineEventItem, IssueDetail } from '@/types/api';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -111,7 +210,8 @@ function IssueRow({
 
 export default function AnalysisDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef    = useRef<HTMLVideoElement>(null);
+  const canvasRef   = useRef<HTMLCanvasElement>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
   const activeEventRef = useRef<HTMLButtonElement>(null);
 
@@ -119,6 +219,9 @@ export default function AnalysisDetailPage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [showRawJson, setShowRawJson] = useState(false);
   const [showArtifacts, setShowArtifacts] = useState(false);
+  const [showSkeleton, setShowSkeleton]   = useState(false);
+  const [overlayData, setOverlayData]     = useState<OverlayData | null>(null);
+  const [overlayLoading, setOverlayLoading] = useState(false);
 
   const { data: session, isLoading } = useQuery({
     queryKey: ['analysis', id],
@@ -172,6 +275,40 @@ export default function AnalysisDetailPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Load overlay data when skeleton is toggled on
+  useEffect(() => {
+    if (!showSkeleton || !artifacts?.overlay || overlayData) return;
+    setOverlayLoading(true);
+    fetchOverlay(artifacts.overlay)
+      .then(setOverlayData)
+      .catch(console.error)
+      .finally(() => setOverlayLoading(false));
+  }, [showSkeleton, artifacts?.overlay, overlayData]);
+
+  // Draw skeleton frame synced to video playback
+  useEffect(() => {
+    if (!showSkeleton || !overlayData || !canvasRef.current || !videoRef.current) return;
+    const frames = overlayData.frames;
+    if (!frames?.length) return;
+
+    // Binary-search for the closest frame by timestamp
+    let lo = 0, hi = frames.length - 1, best = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (frames[mid].timestamp <= currentTime) { best = mid; lo = mid + 1; }
+      else hi = mid - 1;
+    }
+    drawSkeleton(canvasRef.current, videoRef.current, frames[best]);
+  }, [currentTime, showSkeleton, overlayData]);
+
+  // Clear canvas when skeleton is toggled off
+  useEffect(() => {
+    if (!showSkeleton && canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    }
+  }, [showSkeleton]);
+
   const seekTo = useCallback((timestamp: number) => {
     if (videoRef.current) {
       videoRef.current.currentTime = timestamp;
@@ -218,17 +355,41 @@ export default function AnalysisDetailPage() {
               <X className="h-4 w-4 text-white" />
             </button>
 
+            {/* Skeleton toggle */}
+            <button
+              onClick={() => setShowSkeleton(s => !s)}
+              title="Toggle pose skeleton overlay"
+              className={[
+                'absolute top-3 right-14 z-10 h-8 px-2.5 rounded-full flex items-center gap-1.5 text-xs font-medium transition-colors',
+                showSkeleton
+                  ? 'bg-emerald-500/80 text-white'
+                  : 'bg-white/10 hover:bg-white/20 text-white/70',
+              ].join(' ')}
+            >
+              <Activity className="h-3.5 w-3.5" />
+              {overlayLoading ? 'Loading…' : 'Skeleton'}
+            </button>
+
             <div className="flex-1 min-w-0 flex flex-col">
-              <video
-                ref={videoRef}
-                src={artifacts.video}
-                controls
-                autoPlay
-                className="w-full bg-black"
-                style={{ maxHeight: '80vh' }}
-                playsInline
-                onTimeUpdate={handleTimeUpdate}
-              />
+              {/* Video + canvas stacked */}
+              <div className="relative w-full bg-black" style={{ maxHeight: '80vh' }}>
+                <video
+                  ref={videoRef}
+                  src={artifacts.video}
+                  controls
+                  autoPlay
+                  className="w-full"
+                  style={{ maxHeight: '80vh', display: 'block' }}
+                  playsInline
+                  onTimeUpdate={handleTimeUpdate}
+                />
+                {/* Canvas draws skeleton on top of video */}
+                <canvas
+                  ref={canvasRef}
+                  className="absolute inset-0 w-full h-full pointer-events-none"
+                  style={{ display: showSkeleton ? 'block' : 'none' }}
+                />
+              </div>
             </div>
 
             {visibleEvents.length > 0 && (
