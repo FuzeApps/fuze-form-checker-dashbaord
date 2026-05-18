@@ -90,32 +90,47 @@ export default function AdminTenantDetailPage() {
 
       {/* Quota policy */}
       <Card>
-        <CardHeader><CardTitle>Quota & Rollout</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Quota &amp; Rollout</CardTitle>
+        </CardHeader>
         <CardContent>
+          {!quota && (
+            <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950 px-4 py-3 text-sm text-yellow-800 dark:text-yellow-300">
+              <strong>No quota policy set.</strong> This tenant cannot upload videos until you save one.
+              Set <strong>Rollout&nbsp;%</strong> to <strong>100</strong> to allow all users through.
+            </div>
+          )}
           <form
-            onSubmit={(e) => { e.preventDefault(); quotaMutation.mutate({ ...quota, ...quotaForm } as QuotaPolicy); }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              quotaMutation.mutate({ ...quota, ...quotaForm, allowedExercises: quota?.allowedExercises ?? [] } as QuotaPolicy);
+            }}
             className="grid grid-cols-2 gap-4"
           >
             {[
-              { key: 'maxAnalysesPerDay', label: 'Max Analyses/Day', default: quota?.maxAnalysesPerDay ?? 100 },
-              { key: 'maxAnalysesPerUserPerDay', label: 'Max/User/Day', default: quota?.maxAnalysesPerUserPerDay ?? 1 },
-              { key: 'maxVideoDurationSeconds', label: 'Max Video (s)', default: quota?.maxVideoDurationSeconds ?? 30 },
-              { key: 'rolloutPercentage', label: 'Rollout %', default: quota?.rolloutPercentage ?? 5 },
-            ].map(({ key, label, default: def }) => (
-              <div key={key} className="space-y-2">
+              { key: 'maxAnalysesPerDay',        label: 'Max Analyses / Day',       hint: 'Total across all users',          default: quota?.maxAnalysesPerDay        ?? 100 },
+              { key: 'maxAnalysesPerUserPerDay',  label: 'Max Analyses / User / Day', hint: 'Per externalUserId per day',     default: quota?.maxAnalysesPerUserPerDay  ?? 10  },
+              { key: 'maxVideoDurationSeconds',   label: 'Max Video Duration (s)',    hint: '30–300 s',                       default: quota?.maxVideoDurationSeconds   ?? 60  },
+              { key: 'rolloutPercentage',         label: 'Rollout %',                hint: '100 = all users; < 100 = staged', default: quota?.rolloutPercentage         ?? 100 },
+            ].map(({ key, label, hint, default: def }) => (
+              <div key={key} className="space-y-1">
                 <Label>{label}</Label>
                 <Input
                   type="number"
                   defaultValue={def}
                   onChange={(e) => setQuotaForm({ ...quotaForm, [key]: parseFloat(e.target.value) })}
                 />
+                <p className="text-xs text-muted-foreground">{hint}</p>
               </div>
             ))}
-            <div className="col-span-2">
+            <div className="col-span-2 flex items-center gap-3">
               <Button type="submit" loading={quotaMutation.isPending}>
                 <Save className="h-4 w-4 mr-2" />
-                Save Quota
+                {quota ? 'Update Quota' : 'Save Quota (Required)'}
               </Button>
+              {quotaMutation.isSuccess && (
+                <span className="text-sm text-green-600 dark:text-green-400">Saved ✓</span>
+              )}
             </div>
           </form>
         </CardContent>
