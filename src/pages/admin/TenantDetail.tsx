@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminGetTenant, adminUpdateTenant, adminUpsertQuota, adminCreateTenantUser } from '@/api';
@@ -15,7 +15,13 @@ export default function AdminTenantDetailPage() {
   const [saved, setSaved] = useState(false);
   const [showAddUser, setShowAddUser] = useState(false);
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'admin' });
-  const [quotaForm, setQuotaForm] = useState<Partial<QuotaPolicy>>({});
+  const [quotaForm, setQuotaForm] = useState<Partial<QuotaPolicy>>({
+    maxAnalysesPerDay:       100,
+    maxAnalysesPerUserPerDay: 10,
+    maxVideoDurationSeconds:  60,
+    rolloutPercentage:        100,
+    allowedExercises:         [],
+  });
 
   const { data: tenant, isLoading } = useQuery({
     queryKey: ['admin-tenant', id],
@@ -38,9 +44,22 @@ export default function AdminTenantDetailPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-tenant', id] }); setShowAddUser(false); },
   });
 
-  if (isLoading || !tenant) return <p className="text-muted-foreground p-6">Loading...</p>;
+  const quota = (tenant as typeof tenant & { quotaPolicies: QuotaPolicy[] } | undefined)?.quotaPolicies?.[0];
 
-  const quota = (tenant as typeof tenant & { quotaPolicies: QuotaPolicy[] }).quotaPolicies?.[0];
+  // Sync form state with existing policy whenever it loads
+  useEffect(() => {
+    if (quota) {
+      setQuotaForm({
+        maxAnalysesPerDay:        quota.maxAnalysesPerDay,
+        maxAnalysesPerUserPerDay: quota.maxAnalysesPerUserPerDay,
+        maxVideoDurationSeconds:  quota.maxVideoDurationSeconds,
+        rolloutPercentage:        quota.rolloutPercentage,
+        allowedExercises:         quota.allowedExercises ?? [],
+      });
+    }
+  }, [quota?.id]);
+
+  if (isLoading || !tenant) return <p className="text-muted-foreground p-6">Loading...</p>;
 
   return (
     <div className="space-y-6">
@@ -103,21 +122,23 @@ export default function AdminTenantDetailPage() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              quotaMutation.mutate({ ...quota, ...quotaForm, allowedExercises: quota?.allowedExercises ?? [] } as QuotaPolicy);
+              // quotaForm always has all fields (initialized with sensible defaults);
+              // existing quota values are used as the base, form overrides on top.
+              quotaMutation.mutate({ ...quota, ...quotaForm } as QuotaPolicy);
             }}
             className="grid grid-cols-2 gap-4"
           >
             {[
-              { key: 'maxAnalysesPerDay',        label: 'Max Analyses / Day',       hint: 'Total across all users',          default: quota?.maxAnalysesPerDay        ?? 100 },
-              { key: 'maxAnalysesPerUserPerDay',  label: 'Max Analyses / User / Day', hint: 'Per externalUserId per day',     default: quota?.maxAnalysesPerUserPerDay  ?? 10  },
-              { key: 'maxVideoDurationSeconds',   label: 'Max Video Duration (s)',    hint: '30–300 s',                       default: quota?.maxVideoDurationSeconds   ?? 60  },
-              { key: 'rolloutPercentage',         label: 'Rollout %',                hint: '100 = all users; < 100 = staged', default: quota?.rolloutPercentage         ?? 100 },
-            ].map(({ key, label, hint, default: def }) => (
+              { key: 'maxAnalysesPerDay',        label: 'Max Analyses / Day',        hint: 'Total across all users'           },
+              { key: 'maxAnalysesPerUserPerDay',  label: 'Max Analyses / User / Day', hint: 'Per externalUserId per day'      },
+              { key: 'maxVideoDurationSeconds',   label: 'Max Video Duration (s)',    hint: '30–300 s'                        },
+              { key: 'rolloutPercentage',         label: 'Rollout %',                hint: '100 = all users; < 100 = staged'  },
+            ].map(({ key, label, hint }) => (
               <div key={key} className="space-y-1">
                 <Label>{label}</Label>
                 <Input
                   type="number"
-                  defaultValue={def}
+                  value={quotaForm[key as keyof typeof quotaForm] as number ?? ''}
                   onChange={(e) => setQuotaForm({ ...quotaForm, [key]: parseFloat(e.target.value) })}
                 />
                 <p className="text-xs text-muted-foreground">{hint}</p>

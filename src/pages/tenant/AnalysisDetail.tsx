@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { getAnalysis, getAnalysisArtifacts, getAnalysisTimeline } from '@/api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getAnalysis, getAnalysisArtifacts, getAnalysisTimeline, adminRetryJob } from '@/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,7 @@ import {
   Target,
   Lightbulb,
   Star,
+  RefreshCw,
 } from 'lucide-react';
 
 // ─── MediaPipe skeleton ────────────────────────────────────────────────────────
@@ -237,6 +238,7 @@ function IssueRow({
 
 export default function AnalysisDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const qc      = useQueryClient();
   const videoRef    = useRef<HTMLVideoElement>(null);
   const canvasRef   = useRef<HTMLCanvasElement>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
@@ -250,10 +252,31 @@ export default function AnalysisDetailPage() {
   const [overlayData, setOverlayData]     = useState<OverlayData | null>(null);
   const [overlayLoading, setOverlayLoading] = useState(false);
 
+  const retryMutation = useMutation({
+    mutationFn: () => adminRetryJob(id!),
+    onSuccess: () => {
+      setOverlayData(null);
+      qc.invalidateQueries({ queryKey: ['analysis', id] });
+      qc.invalidateQueries({ queryKey: ['analysis-artifacts', id] });
+      qc.invalidateQueries({ queryKey: ['analysis-timeline', id] });
+    },
+  });
+
+  const rerunBanner = retryMutation.isSuccess
+    ? { type: 'success' as const, message: 'Analysis re-queued — results will update automatically.' }
+    : retryMutation.isError
+    ? { type: 'error' as const, message: (retryMutation.error as Error)?.message ?? 'Failed to requeue job.' }
+    : null;
+
   const { data: session, isLoading } = useQuery({
     queryKey: ['analysis', id],
     queryFn: () => getAnalysis(id!),
     enabled: !!id,
+    // Poll every 3 s while the job is queued / processing so the UI updates automatically
+    refetchInterval: (query) => {
+      const s = query.state.data?.status;
+      return s === 'queued' || s === 'processing' ? 3000 : false;
+    },
   });
 
   const { data: artifacts } = useQuery({
@@ -515,6 +538,20 @@ export default function AnalysisDetailPage() {
       )}
 
       <div className="space-y-6">
+        {rerunBanner && (
+          <div className={[
+            'flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm',
+            rerunBanner.type === 'success'
+              ? 'border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300'
+              : 'border-destructive/40 bg-destructive/5 text-destructive',
+          ].join(' ')}>
+            <span>{rerunBanner.message}</span>
+            <button onClick={() => retryMutation.reset()} className="ml-2 text-inherit opacity-60 hover:opacity-100">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         <div className="flex items-center gap-4">
           <Link to="/analyses">
             <Button variant="ghost" size="sm">
@@ -533,6 +570,21 @@ export default function AnalysisDetailPage() {
             </p>
           </div>
           <div className="flex gap-2">
+            {(session.status === 'completed' || session.status === 'failed') && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => retryMutation.mutate()}
+                disabled={retryMutation.isPending}
+              >
+                <RefreshCw className={`h-4 w-4 mr-1 ${retryMutation.isPending ? 'animate-spin' : ''}`} />
+                {retryMutation.isPending
+                  ? 'Queuing…'
+                  : session.status === 'failed'
+                  ? 'Retry Analysis'
+                  : 'Rerun Analysis'}
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => setShowArtifacts(!showArtifacts)}>
               <Download className="h-4 w-4 mr-1" />
               Artifacts
